@@ -23,7 +23,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: main-app
-          fetch-depth: 0
 
       # Step 2: Checkout demo-app
       - name: Checkout demo-app
@@ -32,30 +31,29 @@ jobs:
           repository: ifti56/demo-app
           token: ${{ secrets.DEMO_REPO_TOKEN }}
           path: demo-app
-          fetch-depth: 0
 
       # Step 3: Generate surgical diff of changed lines only
       - name: Generate main changes diff
         id: generate-diff
         run: |
           cd main-app
-          # ensure we have all commits and refs so we can diff by SHA
-          git fetch --prune origin || true
-          # fetch the specific commits referenced by the push event (if available)
+          git fetch origin main
+          # Compare the before and after commits from the push event
           BEFORE=${{ github.event.before }}
           AFTER=${{ github.event.after }}
-          if [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
-            git fetch origin $BEFORE $AFTER || true
-          fi
-          # Compare the before and after commits from the push event
+          
           # If before is all zeros (new branch), compare with HEAD~1
           if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
             BEFORE="HEAD~1"
           fi
-
-          git diff "$BEFORE" "$AFTER" --unified=0 > ../main_changes.diff || true
-          echo "Diff between $BEFORE and $AFTER:"
-          cat ../main_changes.diff
+          
+          # Limit the diff to source files only to avoid applying workflow or config files
+          git diff "$BEFORE" "$AFTER" --unified=0 -- src > ../main_changes.diff || true
+          git diff --name-only "$BEFORE" "$AFTER" -- src > ../main_changed_files.txt || true
+          echo "Changed files (limited to src/):"
+          cat ../main_changed_files.txt || true
+          echo "Diff between $BEFORE and $AFTER (src/):"
+          cat ../main_changes.diff || true
 
       # Step 4: Apply changes to demo-app using git apply
       - name: Apply changes to demo-app
