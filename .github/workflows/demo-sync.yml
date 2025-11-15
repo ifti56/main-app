@@ -1,4 +1,4 @@
-name: Sync Demo with Main via LLM
+name: Sync Demo with Main via Copilot
 
 on:
   push:
@@ -9,127 +9,95 @@ jobs:
   sync-demo:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: write
+      pull-requests: write
+
     env:
       DEMO_REPO_TOKEN: ${{ secrets.DEMO_REPO_TOKEN }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       IGNORE_PATHS: "src/pages/**,src/demo-specific/**"
 
     steps:
-      # Step 1: Checkout main-app (full history to avoid diff errors)
+      # Step 1: Checkout main-app
       - name: Checkout main-app
         uses: actions/checkout@v4
         with:
           path: main-app
-          fetch-depth: 0
 
       # Step 2: Checkout demo-app
       - name: Checkout demo-app
         uses: actions/checkout@v4
         with:
-          repository: ImamIfti056/demo-app
+          repository: ifti56/demo-app
           token: ${{ secrets.DEMO_REPO_TOKEN }}
           path: demo-app
-          fetch-depth: 0
 
-      # Step 3: Generate main changes diff
+      # Step 3: Generate surgical diff of changed lines only
       - name: Generate main changes diff
+        id: generate-diff
         run: |
-          cd main-app
-          git fetch origin main
-          git diff origin/main^..origin/main --unified=0 > ../main_changes.diff
-          cat ../main_changes.diff
+          git --git-dir=main-app/.git fetch origin main
+          git --git-dir=main-app/.git diff --unified=0 ${{ github.event.before }} ${{ github.event.after }} > main_changes.diff
+          cat main_changes.diff
 
-      # Step 4: Setup Python and install dependencies
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      # Step 4: Run Copilot to apply changes
+      - name: Run Copilot to sync demo
+        id: copilot
+        uses: github/copilot-actions@v1
         with:
-          python-version: '3.11'
+          prompt: |
+            You are syncing the demo-app frontend with main-app.
+            Only apply changes from main_changes.diff to demo-app.
+            Respect intentional differences marked by:
+            /* DEMO-INTENTIONAL-START */ ... /* DEMO-INTENTIONAL-END */
+            Do not modify files matching ignore list: ${{ env.IGNORE_PATHS }}.
+            If a hunk cannot be applied exactly, skip it and note it.
+            Provide JSON output: {files: [{path, new_content, note}]}
 
-      - name: Install dependencies
+          files: |
+            main-app/**
+            demo-app/**
+            main_changes.diff
+
+      # Step 5: Apply Copilot output to demo-app
+      - name: Apply Copilot changes
         run: |
-          python -m pip install --upgrade pip
-          pip install requests openai jq
+          mkdir -p temp_changes
+          echo "${{ steps.copilot.outputs.result }}" > temp_changes/copilot_output.json
 
-      # Step 5: Call OpenAI to generate patched files (new 1.x API)
-      - name: Generate patched files via Vercel AI
-        run: |
-          python3 - <<PY
-          import os, json, requests
-          
-          VERCEL_AI_URL = "https://vite-react-alpha-two-2rwal6v0ex.vercel.app/api/ai"
-          
-          with open("main_changes.diff", "r") as f:
-            diff_text = f.read()
-          
-          prompt = f"""
-          You are a coding assistant.
-          You have the diff of main-app in 'main_changes.diff' and the full demo-app source.
-          Task:
-          1. Apply only the diff changes to demo-app files.
-          2. Preserve intentional demo differences marked with:
-           /* DEMO-INTENTIONAL-START */ ... /* DEMO-INTENTIONAL-END */
-          3. Do not modify files matching ignore list: {os.environ['IGNORE_PATHS']}
-          4. Output JSON in this format:
-           {{ "files": [ {{ "path": "<relative-path>", "new_content": "<updated content>", "note": "<optional note>" }} ] }}
-          
-          Diff:
-          {diff_text}
-          """
-          
-          payload = {
-            "messages": [
-                {"role": "system", "content": "You are a skilled coding assistant."},
-                {"role": "user", "content": prompt}
-            ],
-            "model": "gpt-4.1-mini"
-          }
-          
-          resp = requests.post(VERCEL_AI_URL, json=payload)
-          resp.raise_for_status()
-          
-          result = resp.json()["choices"][0]["message"]["content"]
-          
-          with open("llm_output.json", "w") as f:
-            f.write(result)
-          PY
-
-
-      # Step 6: Apply patched files to demo-app
-      - name: Apply patched files
-        run: |
-          cat llm_output.json | jq -c '.files[]' | while read file; do
+          # Loop over each file in JSON output
+          cat temp_changes/copilot_output.json | jq -c '.files[]' | while read file; do
             path=$(echo "$file" | jq -r '.path')
             content=$(echo "$file" | jq -r '.new_content')
             mkdir -p $(dirname demo-app/$path)
             echo "$content" > demo-app/$path
           done
 
-      # Step 7: Commit changes
+      # Step 6: Commit changes to new branch in demo-app
       - name: Commit changes
         run: |
           cd demo-app
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -b sync/llm-auto-${GITHUB_RUN_ID}
+          git checkout -b sync/copilot-auto-${GITHUB_RUN_ID}
           git add .
-          # Only commit if changes exist
-          git diff --cached --quiet || git commit -m "chore(sync): LLM auto-sync from main-app (${GITHUB_SHA::7})"
+          git commit -m "chore(sync): Copilot auto-sync from main-app (${GITHUB_SHA::7})" || echo "No changes to commit"
 
-      # Step 8: Push branch
+      # Step 7: Push branch to demo-app
       - name: Push branch
         run: |
           cd demo-app
           git push origin HEAD
 
-      # Step 9: Create Pull Request
+      # Step 8: Create PR
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
           path: demo-app
-          branch: sync/llm-auto-${GITHUB_RUN_ID}
-          title: "LLM: Automated Demo Sync"
+          branch: sync/copilot-auto-${GITHUB_RUN_ID}
+          title: "Copilot: Automated Demo Sync"
           body: |
-            This PR was automatically generated by an LLM to sync demo-app with main-app.
+            This PR was automatically generated by Copilot to sync demo-app with main-app.
             Main commit: ${{ github.sha }}
             - Files synced from main-app changes
             - Intentional differences preserved
