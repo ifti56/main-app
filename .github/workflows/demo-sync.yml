@@ -36,9 +36,10 @@ jobs:
       - name: Generate main changes diff
         id: generate-diff
         run: |
-          git --git-dir=main-app/.git fetch origin main
-          git --git-dir=main-app/.git diff --unified=0 ${{ github.event.before }} ${{ github.event.after }} > main_changes.diff
-          cat main_changes.diff
+          cd main-app
+          git fetch origin main
+          git diff origin/main^..origin/main --unified=0 > ../main_changes.diff
+          cat ../main_changes.diff
 
       # Step 4: Apply changes to demo-app using git apply
       - name: Apply changes to demo-app
