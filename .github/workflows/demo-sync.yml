@@ -38,7 +38,17 @@ jobs:
         run: |
           cd main-app
           git fetch origin main
-          git diff HEAD origin/main --unified=0 > ../main_changes.diff || true
+          # Compare the before and after commits from the push event
+          BEFORE=${{ github.event.before }}
+          AFTER=${{ github.event.after }}
+          
+          # If before is all zeros (new branch), compare with HEAD~1
+          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            BEFORE="HEAD~1"
+          fi
+          
+          git diff "$BEFORE" "$AFTER" --unified=0 > ../main_changes.diff || true
+          echo "Diff between $BEFORE and $AFTER:"
           cat ../main_changes.diff
 
       # Step 4: Apply changes to demo-app using git apply
