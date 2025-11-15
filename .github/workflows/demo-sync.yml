@@ -43,13 +43,17 @@ jobs:
 
       # Step 4: Apply changes to demo-app using git apply
       - name: Apply changes to demo-app
+        id: apply-changes
         run: |
           cd demo-app
           # Check if diff file has content
           if [ ! -s ../main_changes.diff ]; then
+            echo "changes_made=false" >> $GITHUB_OUTPUT
             echo "ℹ No changes to apply (branches are identical)"
             exit 0
           fi
+          
+          echo "changes_made=true" >> $GITHUB_OUTPUT
           
           # Attempt to apply the diff
           if git apply ../main_changes.diff --check; then
@@ -65,6 +69,7 @@ jobs:
 
       # Step 5: Commit changes to new branch in demo-app
       - name: Commit changes
+        if: steps.apply-changes.outputs.changes_made == 'true'
         run: |
           cd demo-app
           git config user.name "github-actions[bot]"
@@ -75,15 +80,18 @@ jobs:
 
       # Step 6: Push branch to demo-app
       - name: Push branch
+        if: steps.apply-changes.outputs.changes_made == 'true'
         run: |
           cd demo-app
           git push origin HEAD
 
       # Step 7: Create Pull Request
       - name: Create Pull Request
+        if: steps.apply-changes.outputs.changes_made == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           path: demo-app
+          token: ${{ secrets.DEMO_REPO_TOKEN }}
           branch: sync/auto-${GITHUB_RUN_ID}
           title: "chore(sync): Automated Demo Sync"
           body: |
