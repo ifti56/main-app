@@ -77,8 +77,8 @@ jobs:
           
           echo "changes_made=true" >> $GITHUB_OUTPUT
           
-          # Get list of new files (added) from the diff
-          NEW_FILES=$(cd ../main-app && git diff HEAD~1 HEAD --name-only --diff-filter=A -- src || true)
+          # Get list of new files (added) from main-app
+          NEW_FILES=$(cd ../main-app && git diff HEAD~1 HEAD --name-only --diff-filter=A -- src 2>/dev/null || true)
           
           if [ ! -z "$NEW_FILES" ]; then
             echo "📄 New files detected:"
@@ -91,16 +91,31 @@ jobs:
             done
           fi
           
-          # Apply diffs to existing files (modifications)
-          if git apply ../main_changes.diff --check 2>/dev/null; then
-            git apply ../main_changes.diff
-            echo "✓ Changes applied successfully"
-          else
-            echo "⚠ Some hunks could not be applied - trying with --3way"
-            git apply --3way ../main_changes.diff || {
-              echo "✗ Failed to apply diff with --3way"
-              exit 1
-            }
+          # Get list of modified files (exclude new files) from main-app
+          MODIFIED_FILES=$(cd ../main-app && git diff HEAD~1 HEAD --name-only --diff-filter=M -- src 2>/dev/null || true)
+          
+          if [ ! -z "$MODIFIED_FILES" ]; then
+            echo "✏️ Modified files detected:"
+            echo "$MODIFIED_FILES"
+            
+            # Create a filtered diff that only includes modifications (not additions)
+            cd ../main-app
+            git diff HEAD~1 HEAD --unified=0 --diff-filter=M -- src > ../main_changes_modified_only.diff || true
+            cd ../demo-app
+            
+            # Apply only the modified files diff
+            if [ -s ../main_changes_modified_only.diff ]; then
+              if git apply ../main_changes_modified_only.diff --check 2>/dev/null; then
+                git apply ../main_changes_modified_only.diff
+                echo "✓ Modified files applied successfully"
+              else
+                echo "⚠ Some hunks could not be applied - trying with --3way"
+                git apply --3way ../main_changes_modified_only.diff || {
+                  echo "✗ Failed to apply modified files diff with --3way"
+                  exit 1
+                }
+              fi
+            fi
           fi
 
       # Step 5: Commit changes to new branch in demo-app
