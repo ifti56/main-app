@@ -77,8 +77,22 @@ jobs:
           
           echo "changes_made=true" >> $GITHUB_OUTPUT
           
-          # Attempt to apply the diff
-          if git apply ../main_changes.diff --check; then
+          # Get list of new files (added) from the diff
+          NEW_FILES=$(cd ../main-app && git diff HEAD~1 HEAD --name-only --diff-filter=A -- src || true)
+          
+          if [ ! -z "$NEW_FILES" ]; then
+            echo "📄 New files detected:"
+            echo "$NEW_FILES"
+            # Copy new files from main-app to demo-app
+            for FILE in $NEW_FILES; do
+              mkdir -p "$(dirname "$FILE")"
+              cp "../main-app/$FILE" "$FILE"
+              echo "  ✓ Copied $FILE"
+            done
+          fi
+          
+          # Apply diffs to existing files (modifications)
+          if git apply ../main_changes.diff --check 2>/dev/null; then
             git apply ../main_changes.diff
             echo "✓ Changes applied successfully"
           else
