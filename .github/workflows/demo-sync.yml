@@ -38,7 +38,7 @@ jobs:
         run: |
           cd main-app
           git fetch origin main
-          git diff origin/main^..origin/main --unified=0 > ../main_changes.diff
+          git diff HEAD origin/main --unified=0 > ../main_changes.diff || true
           cat ../main_changes.diff
 
       # Step 4: Apply changes to demo-app using git apply
