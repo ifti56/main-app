@@ -23,6 +23,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: main-app
+          fetch-depth: 0
 
       # Step 2: Checkout demo-app
       - name: Checkout demo-app
@@ -31,22 +32,27 @@ jobs:
           repository: ifti56/demo-app
           token: ${{ secrets.DEMO_REPO_TOKEN }}
           path: demo-app
+          fetch-depth: 0
 
       # Step 3: Generate surgical diff of changed lines only
       - name: Generate main changes diff
         id: generate-diff
         run: |
           cd main-app
-          git fetch origin main
-          # Compare the before and after commits from the push event
+          # ensure we have all commits and refs so we can diff by SHA
+          git fetch --prune origin || true
+          # fetch the specific commits referenced by the push event (if available)
           BEFORE=${{ github.event.before }}
           AFTER=${{ github.event.after }}
-          
+          if [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            git fetch origin $BEFORE $AFTER || true
+          fi
+          # Compare the before and after commits from the push event
           # If before is all zeros (new branch), compare with HEAD~1
           if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
             BEFORE="HEAD~1"
           fi
-          
+
           git diff "$BEFORE" "$AFTER" --unified=0 > ../main_changes.diff || true
           echo "Diff between $BEFORE and $AFTER:"
           cat ../main_changes.diff
