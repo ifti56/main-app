@@ -110,7 +110,7 @@ jobs:
           path: demo-app
           token: ${{ secrets.DEMO_REPO_TOKEN }}
           branch: sync/auto-${GITHUB_RUN_ID}
-          base: dev
+          base: main
           title: "chore(sync): Automated Demo Sync"
           body: |
             This PR was automatically generated to sync demo-app with main-app.
