@@ -45,6 +45,12 @@ jobs:
       - name: Apply changes to demo-app
         run: |
           cd demo-app
+          # Check if diff file has content
+          if [ ! -s ../main_changes.diff ]; then
+            echo "ℹ No changes to apply (branches are identical)"
+            exit 0
+          fi
+          
           # Attempt to apply the diff
           if git apply ../main_changes.diff --check; then
             git apply ../main_changes.diff
