@@ -38,24 +38,18 @@ jobs:
         run: |
           cd main-app
           git fetch origin main
-          # Compare the before and after commits from the push event
-          BEFORE=${{ github.event.before }}
-          AFTER=${{ github.event.after }}
-
-          # If before is all zeros (new branch), compare with HEAD~1
-          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-            BEFORE="HEAD~1"
-          fi
-
+          
+          # Use HEAD and HEAD~1 (guaranteed to exist locally) instead of event SHAs which may be unavailable
+          BEFORE="HEAD~1"
+          AFTER="HEAD"
+          
           echo "--- DIFF DEBUG ---"
-          echo "BEFORE (raw): $BEFORE"
-          echo "AFTER  (raw): $AFTER"
-          echo "Resolve BEFORE ref:" && git rev-parse --verify --quiet $BEFORE || echo "(BEFORE not resolvable locally)"
-          echo "Resolve AFTER ref:" && git rev-parse --verify --quiet $AFTER || echo "(AFTER not resolvable locally)"
-          echo "Commit info for BEFORE (if resolvable):"
-          git show --no-patch --format="%h %ci %s" $BEFORE || echo "(no info for BEFORE)"
-          echo "Commit info for AFTER (if resolvable):"
-          git show --no-patch --format="%h %ci %s" $AFTER || echo "(no info for AFTER)"
+          echo "BEFORE: $BEFORE"
+          echo "AFTER:  $AFTER"
+          echo "Commit info for BEFORE:"
+          git show --no-patch --format="%H %ci %s" $BEFORE || echo "(BEFORE unavailable)"
+          echo "Commit info for AFTER:"
+          git show --no-patch --format="%H %ci %s" $AFTER || echo "(AFTER unavailable)"
 
           # Limit the diff to source files only to avoid applying workflow or config files
           git diff "$BEFORE" "$AFTER" --unified=0 -- src > ../main_changes.diff || true
