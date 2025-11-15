@@ -105,15 +105,16 @@ jobs:
       # Step 7: Create Pull Request
       - name: Create Pull Request
         if: steps.apply-changes.outputs.changes_made == 'true'
-        uses: peter-evans/create-pull-request@v6
-        with:
-          path: demo-app
-          token: ${{ secrets.DEMO_REPO_TOKEN }}
-          branch: sync/auto-${GITHUB_RUN_ID}
-          base: main
-          title: "chore(sync): Automated Demo Sync"
-          body: |
-            This PR was automatically generated to sync demo-app with main-app.
-            Main commit: ${{ github.sha }}
-            - Applied changes from main-app
-            - Files in ignore list skipped
+        env:
+          GH_TOKEN: ${{ secrets.DEMO_REPO_TOKEN }}
+        run: |
+          cd demo-app
+          gh pr create \
+            --title "chore(sync): Automated Demo Sync" \
+            --body "This PR was automatically generated to sync demo-app with main-app.
+          
+          Main commit: ${{ github.sha }}
+          - Applied changes from main-app
+          - Files in ignore list skipped" \
+            --base main \
+            --head sync/auto-${GITHUB_RUN_ID}
