@@ -5,6 +5,7 @@ export default function UserCard({ user }) {
             <h3>{user.name}</h3>
             <p className="role">{user.role}</p>
             <p className="role">new line added in main and deleted one</p>
+            <p className="role">2nd line added</p>
         </div>
     );
 }
