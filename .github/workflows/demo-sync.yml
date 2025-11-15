@@ -33,67 +33,60 @@ jobs:
           path: demo-app
 
       # Step 3: Generate surgical diff of changed lines only
-      # - name: Generate main changes diff
-      #   id: generate-diff
-      #   run: |
-      #     cd main-app
-      #     git fetch origin main
-      #     # Compare the before and after commits from the push event
-      #     BEFORE=${{ github.event.before }}
-      #     AFTER=${{ github.event.after }}
-      #     
-      #     # If before is all zeros (new branch), compare with HEAD~1
-      #     if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-      #       BEFORE="HEAD~1"
-      #     fi
-      #     
-      #     git diff "$BEFORE" "$AFTER" --unified=0 > ../main_changes.diff || true
-      #     echo "Diff between $BEFORE and $AFTER:"
-      #     cat ../main_changes.diff
+      - name: Generate main changes diff
+        id: generate-diff
+        run: |
+          cd main-app
+          git fetch origin main
+          # Compare the before and after commits from the push event
+          BEFORE=${{ github.event.before }}
+          AFTER=${{ github.event.after }}
+          
+          # If before is all zeros (new branch), compare with HEAD~1
+          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            BEFORE="HEAD~1"
+          fi
+          
+          git diff "$BEFORE" "$AFTER" --unified=0 > ../main_changes.diff || true
+          echo "Diff between $BEFORE and $AFTER:"
+          cat ../main_changes.diff
 
       # Step 4: Apply changes to demo-app using git apply
-      # - name: Apply changes to demo-app
-      #   id: apply-changes
-      #   run: |
-      #     cd demo-app
-      #     # Check if diff file has content
-      #     if [ ! -s ../main_changes.diff ]; then
-      #       echo "changes_made=false" >> $GITHUB_OUTPUT
-      #       echo "ℹ No changes to apply (branches are identical)"
-      #       exit 0
-      #     fi
-      #     
-      #     echo "changes_made=true" >> $GITHUB_OUTPUT
-      #     
-      #     # Attempt to apply the diff
-      #     if git apply ../main_changes.diff --check; then
-      #       git apply ../main_changes.diff
-      #       echo "✓ Changes applied successfully"
-      #     else
-      #       echo "⚠ Some hunks could not be applied - trying with --3way"
-      #       git apply --3way ../main_changes.diff || {
-      #         echo "✗ Failed to apply diff with --3way"
-      #         exit 1
-      #       }
-      #     fi
-
-      # Step 5: Create dummy commit to new branch in demo-app
-      - name: Create dummy commit
+      - name: Apply changes to demo-app
         id: apply-changes
+        run: |
+          cd demo-app
+          # Check if diff file has content
+          if [ ! -s ../main_changes.diff ]; then
+            echo "changes_made=false" >> $GITHUB_OUTPUT
+            echo "ℹ No changes to apply (branches are identical)"
+            exit 0
+          fi
+          
+          echo "changes_made=true" >> $GITHUB_OUTPUT
+          
+          # Attempt to apply the diff
+          if git apply ../main_changes.diff --check; then
+            git apply ../main_changes.diff
+            echo "✓ Changes applied successfully"
+          else
+            echo "⚠ Some hunks could not be applied - trying with --3way"
+            git apply --3way ../main_changes.diff || {
+              echo "✗ Failed to apply diff with --3way"
+              exit 1
+            }
+          fi
+
+      # Step 5: Commit changes to new branch in demo-app
+      - name: Commit changes
+        if: steps.apply-changes.outputs.changes_made == 'true'
         run: |
           cd demo-app
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b sync/auto-${GITHUB_RUN_ID}
-          
-          # Create dummy file with timestamp
-          echo "// Auto-synced at $(date)" > sync-dummy.js
-          echo "export const SYNC_TIMESTAMP = '$(date -u +%Y-%m-%dT%H:%M:%SZ)';" >> sync-dummy.js
-          echo "export const SOURCE_COMMIT = '${GITHUB_SHA::7}';" >> sync-dummy.js
-          
-          git add sync-dummy.js
-          git commit -m "chore(sync): Auto-sync from main-app (${GITHUB_SHA::7})"
-          echo "changes_made=true" >> $GITHUB_OUTPUT
+          git add .
+          git commit -m "chore(sync): Auto-sync from main-app (${GITHUB_SHA::7})" || echo "No changes to commit"
 
       # Step 6: Push branch to demo-app
       - name: Push branch
