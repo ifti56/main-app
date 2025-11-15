@@ -37,19 +37,22 @@ jobs:
         id: generate-diff
         run: |
           cd main-app
-          git fetch origin main
+          # Fetch full history including all commits and tags
+          git fetch --deepen=999999 origin main || git fetch origin main
           
-          # Use HEAD and HEAD~1 (guaranteed to exist locally) instead of event SHAs which may be unavailable
+          # Use HEAD and HEAD~1 (last two commits)
           BEFORE="HEAD~1"
           AFTER="HEAD"
           
           echo "--- DIFF DEBUG ---"
           echo "BEFORE: $BEFORE"
           echo "AFTER:  $AFTER"
+          echo "Total commits on main:"
+          git rev-list --count origin/main
           echo "Commit info for BEFORE:"
-          git show --no-patch --format="%H %ci %s" $BEFORE || echo "(BEFORE unavailable)"
+          git show --no-patch --format="%H %ci %s" $BEFORE 2>/dev/null || echo "(BEFORE unavailable)"
           echo "Commit info for AFTER:"
-          git show --no-patch --format="%H %ci %s" $AFTER || echo "(AFTER unavailable)"
+          git show --no-patch --format="%H %ci %s" $AFTER 2>/dev/null || echo "(AFTER unavailable)"
 
           # Limit the diff to source files only to avoid applying workflow or config files
           git diff "$BEFORE" "$AFTER" --unified=0 -- src > ../main_changes.diff || true
