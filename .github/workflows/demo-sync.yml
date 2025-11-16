@@ -143,79 +143,79 @@ jobs:
                   BACKUP="../demo-app_backups/$FILE"
                   if [ -f "$BACKUP" ]; then
                     TARGET_FILE="$FILE" BACKUP_FILE="$BACKUP" python - << 'PY'
-                    import os
+import os
 
-                    file_path = os.environ["TARGET_FILE"]
-                    backup_path = os.environ["BACKUP_FILE"]
+file_path = os.environ["TARGET_FILE"]
+backup_path = os.environ["BACKUP_FILE"]
 
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        new_lines = f.readlines()
+with open(file_path, "r", encoding="utf-8") as f:
+    new_lines = f.readlines()
 
-                    with open(backup_path, "r", encoding="utf-8") as f:
-                        orig_lines = f.readlines()
-
-
-                    def restore_blocks(new, orig):
-                        result = []
-                        i_new = 0
-                        i_orig = 0
-                        n_new = len(new)
-                        n_orig = len(orig)
-
-                        while i_new < n_new:
-                            line_new = new[i_new]
-                            if "INTENTIONAL-START" in line_new:
-                                # Find corresponding block in original file
-                                start_o = None
-                                for j in range(i_orig, n_orig):
-                                    if "INTENTIONAL-START" in orig[j]:
-                                        start_o = j
-                                        break
-
-                                if start_o is None:
-                                    # No corresponding block in original; keep new block as-is
-                                    result.append(line_new)
-                                    i_new += 1
-                                    continue
-
-                                # Collect original block (from START to END inclusive)
-                                block = []
-                                k = start_o
-                                while k < n_orig:
-                                    block.append(orig[k])
-                                    if "INTENTIONAL-END" in orig[k]:
-                                        k += 1
-                                        break
-                                    k += 1
-
-                                # Append original block to result
-                                result.extend(block)
-                                i_orig = k
-
-                                # Skip corresponding block in new file
-                                i_new += 1
-                                while i_new < n_new:
-                                    if "INTENTIONAL-END" in new[i_new]:
-                                        i_new += 1
-                                        break
-                                    i_new += 1
-                            else:
-                                result.append(line_new)
-                                i_new += 1
-
-                        return result
+with open(backup_path, "r", encoding="utf-8") as f:
+    orig_lines = f.readlines()
 
 
-                    restored = restore_blocks(new_lines, orig_lines)
+def restore_blocks(new, orig):
+    result = []
+    i_new = 0
+    i_orig = 0
+    n_new = len(new)
+    n_orig = len(orig)
 
-                    with open(file_path, "w", encoding="utf-8") as f:
-                        f.writelines(restored)
-                    PY
-                      fi
-                    done
+    while i_new < n_new:
+        line_new = new[i_new]
+        if "INTENTIONAL-START" in line_new:
+            # Find corresponding block in original file
+            start_o = None
+            for j in range(i_orig, n_orig):
+                if "INTENTIONAL-START" in orig[j]:
+                    start_o = j
+                    break
+
+            if start_o is None:
+                # No corresponding block in original; keep new block as-is
+                result.append(line_new)
+                i_new += 1
+                continue
+
+            # Collect original block (from START to END inclusive)
+            block = []
+            k = start_o
+            while k < n_orig:
+                block.append(orig[k])
+                if "INTENTIONAL-END" in orig[k]:
+                    k += 1
+                    break
+                k += 1
+
+            # Append original block to result
+            result.extend(block)
+            i_orig = k
+
+            # Skip corresponding block in new file
+            i_new += 1
+            while i_new < n_new:
+                if "INTENTIONAL-END" in new[i_new]:
+                    i_new += 1
+                    break
+                i_new += 1
+        else:
+            result.append(line_new)
+            i_new += 1
+
+    return result
+
+
+restored = restore_blocks(new_lines, orig_lines)
+
+with open(file_path, "w", encoding="utf-8") as f:
+    f.writelines(restored)
+PY
                   fi
-                fi
+                done
               fi
+            fi
+          fi
 
       # Step 5: Commit changes to new branch in demo-app
       - name: Commit changes
@@ -246,8 +246,8 @@ jobs:
             --title "chore(sync): Automated Demo Sync" \
             --body "This PR was automatically generated to sync demo-app with main-app.
           
-          Main commit: ${{ github.sha }}
-          - Applied changes from main-app
-          - Files in ignore list skipped" \
-            --base main \
-            --head sync/auto-${GITHUB_RUN_ID}
+Main commit: ${{ github.sha }}
+- Applied changes from main-app
+- Files in ignore list skipped" \
+  --base main \
+  --head sync/auto-${GITHUB_RUN_ID}
