@@ -98,6 +98,15 @@ jobs:
             echo "✏️ Modified files detected:"
             echo "$MODIFIED_FILES"
             
+            # Ensure each modified file exists in demo-app; if missing, create it from main-app
+            for FILE in $MODIFIED_FILES; do
+              if [ ! -f "$FILE" ]; then
+                echo "📄 $FILE is modified in main-app but missing in demo-app; copying it over"
+                mkdir -p "$(dirname "$FILE")"
+                cp "../main-app/$FILE" "$FILE"
+              fi
+            done
+            
             # Create a filtered diff that only includes modifications (not additions)
             cd ../main-app
             git diff HEAD~1 HEAD --unified=0 --diff-filter=M -- src > ../main_changes_modified_only.diff || true
