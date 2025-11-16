@@ -6,6 +6,7 @@ export default function UserCard({ user }) {
             <p className="role">{user.role}</p>
             <p className="role">new line added in main and deleted one</p>
             <p className="role">2nd line added</p>
+            <p className="role">3rd line added</p>
         </div>
     );
 }
