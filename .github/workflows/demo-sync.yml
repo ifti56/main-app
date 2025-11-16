@@ -98,123 +98,98 @@ jobs:
             echo "✏️ Modified files detected:"
             echo "$MODIFIED_FILES"
             
-            # Ensure each modified file exists in demo-app; if missing, create it from main-app
+            # For each modified file, copy the latest version from main-app into demo-app,
+            # but preserve any INTENTIONAL-START/END blocks from the existing demo file.
             for FILE in $MODIFIED_FILES; do
-              if [ ! -f "$FILE" ]; then
-                echo "📄 $FILE is modified in main-app but missing in demo-app; copying it over"
-                mkdir -p "$(dirname "$FILE")"
-                cp "../main-app/$FILE" "$FILE"
-              fi
-            done
-            
-            # Backup files in demo-app that contain intentional-difference markers so we can restore those blocks
-            INTENTIONAL_FILES=""
-            for FILE in $MODIFIED_FILES; do
+              echo "⟳ Syncing modified file: $FILE"
+
+              HAS_INTENTIONAL=false
               if [ -f "$FILE" ] && grep -q 'INTENTIONAL-START' "$FILE"; then
+                HAS_INTENTIONAL=true
                 mkdir -p "../demo-app_backups/$(dirname "$FILE")"
                 cp "$FILE" "../demo-app_backups/$FILE"
-                INTENTIONAL_FILES="$INTENTIONAL_FILES $FILE"
+              fi
+
+              # Copy latest file contents from main-app
+              mkdir -p "$(dirname "$FILE")"
+              cp "../main-app/$FILE" "$FILE"
+
+              # If there was an intentional block in the original demo file, restore it
+              if [ "$HAS_INTENTIONAL" = true ]; then
+                BACKUP="../demo-app_backups/$FILE"
+                if [ -f "$BACKUP" ]; then
+                  TARGET_FILE="$FILE" BACKUP_FILE="$BACKUP" python - << 'PY'
+                  import os
+
+                  file_path = os.environ["TARGET_FILE"]
+                  backup_path = os.environ["BACKUP_FILE"]
+
+                  with open(file_path, "r", encoding="utf-8") as f:
+                      new_lines = f.readlines()
+
+                  with open(backup_path, "r", encoding="utf-8") as f:
+                      orig_lines = f.readlines()
+
+
+                  def restore_blocks(new, orig):
+                      result = []
+                      i_new = 0
+                      i_orig = 0
+                      n_new = len(new)
+                      n_orig = len(orig)
+
+                      while i_new < n_new:
+                          line_new = new[i_new]
+                          if "INTENTIONAL-START" in line_new:
+                              # Find corresponding block in original file
+                              start_o = None
+                              for j in range(i_orig, n_orig):
+                                  if "INTENTIONAL-START" in orig[j]:
+                                      start_o = j
+                                      break
+
+                              if start_o is None:
+                                  # No corresponding block in original; keep new block as-is
+                                  result.append(line_new)
+                                  i_new += 1
+                                  continue
+
+                              # Collect original block (from START to END inclusive)
+                              block = []
+                              k = start_o
+                              while k < n_orig:
+                                  block.append(orig[k])
+                                  if "INTENTIONAL-END" in orig[k]:
+                                      k += 1
+                                      break
+                                  k += 1
+
+                              # Append original block to result
+                              result.extend(block)
+                              i_orig = k
+
+                              # Skip corresponding block in new file
+                              i_new += 1
+                              while i_new < n_new:
+                                  if "INTENTIONAL-END" in new[i_new]:
+                                      i_new += 1
+                                      break
+                                  i_new += 1
+                          else:
+                              result.append(line_new)
+                              i_new += 1
+
+                      return result
+
+
+                  restored = restore_blocks(new_lines, orig_lines)
+
+                  with open(file_path, "w", encoding="utf-8") as f:
+                      f.writelines(restored)
+                  PY
+                fi
               fi
             done
-            
-            # Create a filtered diff that only includes modifications (not additions)
-            cd ../main-app
-            git diff HEAD~1 HEAD --unified=0 --diff-filter=M -- src > ../main_changes_modified_only.diff || true
-            cd ../demo-app
-            
-            # Apply only the modified files diff
-            if [ -s ../main_changes_modified_only.diff ]; then
-              if git apply ../main_changes_modified_only.diff --check 2>/dev/null; then
-                git apply ../main_changes_modified_only.diff
-                echo "✓ Modified files applied successfully"
-              else
-                echo "⚠ Some hunks could not be applied - trying with --3way"
-                git apply --3way ../main_changes_modified_only.diff || {
-                  echo "✗ Failed to apply modified files diff with --3way"
-                  exit 1
-                }
-              fi
-              
-              # After applying diffs, restore intentional blocks from backups so demo-specific code stays untouched
-              if [ ! -z "$INTENTIONAL_FILES" ]; then
-                echo "♻ Restoring intentional blocks in demo-app for files:"
-                echo "$INTENTIONAL_FILES"
-                for FILE in $INTENTIONAL_FILES; do
-                  BACKUP="../demo-app_backups/$FILE"
-                  if [ -f "$BACKUP" ]; then
-                    TARGET_FILE="$FILE" BACKUP_FILE="$BACKUP" python - << 'PY'
-                    import os
-
-                    file_path = os.environ["TARGET_FILE"]
-                    backup_path = os.environ["BACKUP_FILE"]
-
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        new_lines = f.readlines()
-
-                    with open(backup_path, "r", encoding="utf-8") as f:
-                        orig_lines = f.readlines()
-
-
-                    def restore_blocks(new, orig):
-                        result = []
-                        i_new = 0
-                        i_orig = 0
-                        n_new = len(new)
-                        n_orig = len(orig)
-
-                        while i_new < n_new:
-                            line_new = new[i_new]
-                            if "INTENTIONAL-START" in line_new:
-                                # Find corresponding block in original file
-                                start_o = None
-                                for j in range(i_orig, n_orig):
-                                    if "INTENTIONAL-START" in orig[j]:
-                                        start_o = j
-                                        break
-
-                                if start_o is None:
-                                    # No corresponding block in original; keep new block as-is
-                                    result.append(line_new)
-                                    i_new += 1
-                                    continue
-
-                                # Collect original block (from START to END inclusive)
-                                block = []
-                                k = start_o
-                                while k < n_orig:
-                                    block.append(orig[k])
-                                    if "INTENTIONAL-END" in orig[k]:
-                                        k += 1
-                                        break
-                                    k += 1
-
-                                # Append original block to result
-                                result.extend(block)
-                                i_orig = k
-
-                                # Skip corresponding block in new file
-                                i_new += 1
-                                while i_new < n_new:
-                                    if "INTENTIONAL-END" in new[i_new]:
-                                        i_new += 1
-                                        break
-                                    i_new += 1
-                            else:
-                                result.append(line_new)
-                                i_new += 1
-
-                        return result
-
-
-                    restored = restore_blocks(new_lines, orig_lines)
-
-                    with open(file_path, "w", encoding="utf-8") as f:
-                        f.writelines(restored)
-          PY
-                  fi
-                done
-              fi
-            fi
           fi
 
       # Step 5: Commit changes to new branch in demo-app
